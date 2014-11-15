@@ -72,9 +72,20 @@ class GetModel(Model):
         Either send get a single result if there is an _id parameter or send a list of results
         """
         params = self.params.getParams()
+        for k,v in params.items():
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        print(repr(params))
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        
         if len(params):
+            if params['id']:
+                oid = {'id':int(params['id'])}
+            else:
+                oid = {'_id':params['_id']}
             try:
-                result = yield self.collection.find_one({'_id':params['_id']})
+                result = yield self.collection.find_one(oid)
                 result['_id'] = str(result['_id'])
                 self.setResponseDictSuccess(result)
             except Exception as e:
@@ -95,17 +106,11 @@ class PostModel(Model):
         params = self.params.getParams()
         for k,v in params.items():
             params[k]= v.decode("utf-8") 
-        if '_id' in params.keys():
-            result = yield self.collection.find_one({'_id':params['_id']})
-            if result:
-                params['created'] = result['created']
         obj = self.schematic(params)
         try:
-            if not obj._id and 'created' in obj._fields:
-                obj.created = datetime.datetime.utcnow()
-                obj._id = ObjectId()
+            obj.created = datetime.datetime.utcnow()
+            obj._id = ObjectId()
             obj.validate()
-
             result = yield self.collection.insert(obj.to_primitive())
             self.setResponseDictSuccess({"_id": str(result)})
         except ValidationError as e:
@@ -136,8 +141,15 @@ class DeleteModel(Model):
     @tornado.gen.coroutine
     def setResponseDict(self):
         params = self.params.getParams()
+        for k,v in params.items():
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
+        if params['id']:
+            oid = {'id':int(params['id'])}
+        else:
+            oid = {'_id':params['_id']}
         try:
-            result = yield self.collection.remove({'_id':params['_id']})
+            result = yield self.collection.remove(oid)
             self.setResponseDictSuccess({"_id": str(result)})
         except ValidationError as e:
             self.setResponseDictErrors(e)

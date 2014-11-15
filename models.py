@@ -7,15 +7,20 @@ class BaseModel(Model):
     _id = ObjectIdType()
 
 class Song(BaseModel):
-    name = StringType(max_length=40)
+    id = IntType() # for test
+    song = StringType(max_length=40)
+    artist = StringType(max_length=40)
+    rank = IntType()
     created = DateTimeType()
-
 
 objects = {"Song": Song}
 
 """
-curl --data "name=pig" http://127.0.0.1:8888/animal
-curl --data "name=horse" http://127.0.0.1:8888/animal
-curl --data "name=cow" http://127.0.0.1:8888/animal
-curl http://127.0.0.1:8888/animal
+curl -X GET -v -H "Accept: application/json" http://127.0.0.1:8888/song/list/
+curl -X POST -v -H "Accept: application/json" -d "id=2002&artist=MikeArtistMike&song=SongToSongSong&rank=1001" http://127.0.0.1:8888/song/new/
+curl -X GET -v -H "Accept: application/json" http://127.0.0.1:8888/song/findone/findone/8888d58dd1e5ba35fc062788/?id=2002
+
+curl -X PUT -v -H "Accept: application/json" -d "artist=MikeArtistMike&song=SongToSongSong&rank=1021" http://127.0.0.1:8888/song/update/8888d58dd1e5ba35fc062788/?id=2002
+curl -X DELETE -v -H "Accept: application/json" http://127.0.0.1:8888/song/delete/8888d58dd1e5ba35fc062788/?id=2002
+
 """
