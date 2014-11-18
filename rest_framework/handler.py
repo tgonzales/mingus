@@ -4,117 +4,125 @@ from bson import json_util
 
 import tornado.gen
 
-class MotorHandler(tornado.web.RequestHandler):
 
+class MotorHandler(tornado.web.RequestHandler):
     def initialize(self, model, prefix, mtype):
         self.model = model
         self.prefix = prefix
         self.mtype = mtype
         self.response_dict = ""
-        
 
     def sendJson(self, data):
         data = json.dumps(data, sort_keys=True, indent=4, default=json_util.default)
         self.write(data)
 
 
-def generate_response(request):
+def generate_response_get(request):
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.setResponseDict()
+        yield model.getList()
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
     return _request
 
-"""
-class MainHandler(MotorHandler):
 
-    @generate_response
+def generate_response_post(request):
+    @tornado.web.asynchronous
+    @tornado.gen.coroutine
+    def _request(self, *args, **kwargs):
+
+        model = self.model.build(self.prefix, self.request, args, kwargs)
+        yield model.setPostResponseDict()
+        self.response_dict = model.getResponseDict()
+        tornado.gen.coroutine(request)(self, *args, **kwargs)
+
+    return _request
+
+
+def generate_response_put(request):
+    @tornado.web.asynchronous
+    @tornado.gen.coroutine
+    def _request(self, *args, **kwargs):
+
+        model = self.model.build(self.prefix, self.request, args, kwargs)
+        yield model.setPutResponseDict()
+        self.response_dict = model.getResponseDict()
+        tornado.gen.coroutine(request)(self, *args, **kwargs)
+
+    return _request
+
+
+def generate_response_delete(request):
+    @tornado.web.asynchronous
+    @tornado.gen.coroutine
+    def _request(self, *args, **kwargs):
+
+        model = self.model.build(self.prefix, self.request, args, kwargs)
+        yield model.setDeleteResponseDict()
+        self.response_dict = model.getResponseDict()
+        tornado.gen.coroutine(request)(self, *args, **kwargs)
+
+    return _request
+
+
+class ResourceHandler(MotorHandler):
+    
+    SUPPORTED_METHODS = ("GET", "POST", "PUT","DELETE")
+    
+    @generate_response_get
     def get(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-    @generate_response
+    @generate_response_post
     def post(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-    @generate_response
+    @generate_response_put
     def put(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-    @generate_response
+    @generate_response_delete
     def delete(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-"""
 
-class ListHandler(MotorHandler):
+'''
+class DetailHandler(MotorHandler):
     
-    SUPPORTED_METHODS = ("GET")
-    
-    @generate_response
+    SUPPORTED_METHODS = ("GET","PUT","DELETE")
+
+    @generate_response_get
     def get(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-class PostHandler(MotorHandler):
-    
-    SUPPORTED_METHODS = ("POST")
-
-    @generate_response
-    def post(self, *args, **kwargs):
-        self.sendJson(self.response_dict)
-
-class FindOneHandler(MotorHandler):
-    
-    SUPPORTED_METHODS = ("GET")
-
-    @generate_response
-    def get(self, *args, **kwargs):
-        self.sendJson(self.response_dict)
-
-class UpdateHandler(MotorHandler):
-    
-    SUPPORTED_METHODS = ("PUT")
-
-    @generate_response
+    @generate_response_put
     def put(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-class DeleteHandler(MotorHandler):
-
-    SUPPORTED_METHODS = ("DELETE")
-    
-    @generate_response
+    @generate_response_delete
     def delete(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
-handlers = {"List": ListHandler, "Post": PostHandler, "FindOne": FindOneHandler, "Put": UpdateHandler, "Delete": DeleteHandler}
+'''
 
-def rest_routes(objects, handlers, model):
+
+def rest_routes(objects, model):
     routes = []
     for name, cls in objects.items():
+        print('Starting Server - Tornado Rest Framework')
         
-        route = (r'/%s/list/?' % name.lower(),  handlers['List'], dict(model=model, prefix=name, mtype="list"))
-        print(route)
+        route = (r'/%s/?' % name.lower(), ResourceHandler, dict(model=model, prefix=name, mtype="list"))
+        #print(route)
+        print('model:{0} - list and post --> /{0}/?'.format(name.lower()))
         routes.append( route )
         
-        route = (r'/%s/new/?' % name.lower(), handlers['Post'], dict(model=model, prefix=name, mtype="new") )
-        print(route)
-        routes.append( route )
-        
-        route = (r'/%s/findone/([0-9a-fA-F]{24,})/?' % name.lower(),  handlers['FindOne'], dict(model=model, prefix=name, mtype="findone"))
-        print(route)
-        routes.append( route )
-        
-        route = (r'/%s/update/([0-9a-fA-F]{24,})/?' % name.lower(),  handlers['Put'], dict(model=model, prefix=name, mtype="update"))
-        print(route)
-        routes.append( route )
-        
-        route = (r'/%s/delete/([0-9a-fA-F]{24,})/?' % name.lower(),  handlers['Delete'], dict(model=model, prefix=name, mtype="delete"))
-        print(route)
+        route = (r'/%s/([0-9a-fA-F]{24,})/?' % name.lower(),  ResourceHandler, dict(model=model, prefix=name, mtype="detail"))
+        #print(route)
+        print('model:{0} - get, put, delete --> /{0}/([0-9a-fA-F]{{24,}})/?'.format(name.lower()))
         routes.append( route )
         
     return routes
