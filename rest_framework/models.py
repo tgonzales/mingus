@@ -3,10 +3,9 @@ from schematics.types.compound import ListType, DictType, ModelType
 
 import tornado.gen
 import tornado.web
-import functools
-import motor
+#import motor
 from schematics.exceptions import ValidationError
-from schematics.contrib.mongo import ObjectIdType
+#from schematics.contrib.mongo import ObjectIdType
 from bson.objectid import ObjectId
 import json
 import datetime
@@ -64,10 +63,10 @@ class Model(object):
         return self.responseDict
 
 
-class GetModel(Model):
+class ResourceModel(Model):
 
     @tornado.gen.coroutine
-    def setResponseDict(self):
+    def getList(self):
         """
         Either send get a single result if there is an _id parameter or send a list of results
         """
@@ -75,12 +74,11 @@ class GetModel(Model):
         for k,v in params.items():
             if type(v) == bytes:
                 params[k]= v.decode("utf-8") 
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print(repr(params))
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
         
+        print(params)
+
         if len(params):
-            if params['id']:
+            if 'id' in params:
                 oid = {'id':int(params['id'])}
             else:
                 oid = {'_id':params['_id']}
@@ -99,13 +97,13 @@ class GetModel(Model):
             self.setResponseDictSuccess(results)
         return
 
-class PostModel(Model):
 
     @tornado.gen.coroutine
-    def setResponseDict(self):
+    def setPostResponseDict(self):
         params = self.params.getParams()
         for k,v in params.items():
-            params[k]= v.decode("utf-8") 
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
         obj = self.schematic(params)
         try:
             obj.created = datetime.datetime.utcnow()
@@ -117,29 +115,100 @@ class PostModel(Model):
             self.setResponseDictErrors(e)
         return
 
-
-class PutModel(Model):
     @tornado.gen.coroutine
-    def setResponseDict(self):
+    def setPutResponseDict(self):
         params = self.params.getParams()
         for k,v in params.items():
-            params[k]= v.decode("utf-8") 
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8")
 
+        obj = {key: value for key, value in params.items() if key is not '_id'}
+
+        if 'id' in params:
+            oid = {'id':int(params['id'])}
+        else:
+            oid = {'_id':params['_id']}
         try:
-            if '_id' in params.keys():
-                result = yield self.collection.update({'_id':params['_id']},  {"$set": params})
-                if result:
-                    params['created'] = result['created']
-            result = yield self.collection.insert(obj.to_primitive())
+            result = yield self.collection.update(oid,  {"$set": obj}, upsert=True)
+            self.setResponseDictSuccess({"_id": params['_id']})
+        except ValidationError as e:
+            self.setResponseDictErrors(e)
+        return
+
+
+    @tornado.gen.coroutine
+    def setDeleteResponseDict(self):
+        params = self.params.getParams()
+        for k,v in params.items():
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
+
+        if params['id']:
+            oid = {'id':int(params['id'])}
+        else:
+            oid = {'_id':params['_id']}
+        try:
+            result = yield self.collection.remove(oid)
+            self.setResponseDictSuccess({"_id": str(result)})
+        except ValidationError as e:
+            self.setResponseDictErrors(e)
+        return
+
+'''
+class DetailModel(Model):
+    @tornado.gen.coroutine
+    def setPutResponseDict(self):
+        params = self.params.getParams()
+        for k,v in params.items():
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        print(repr(params))
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+
+
+        if params['id']:
+            oid = {'id':int(params['id'])}
+        else:
+            oid = {'_id':params['_id']}
+        try:
+            result = yield self.collection.update(oid,  {"$set": params})
+            self.setResponseDictSuccess({"_id": params['_id']})
+        except ValidationError as e:
+            self.setResponseDictErrors(e)
+        return
+
+
+    @tornado.gen.coroutine
+    def setDeleteResponseDict(self):
+        params = self.params.getParams()
+        for k,v in params.items():
+            if type(v) == bytes:
+                params[k]= v.decode("utf-8") 
+
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        print(repr(params))
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+
+
+
+        if params['id']:
+            oid = {'id':int(params['id'])}
+        else:
+            oid = {'_id':params['_id']}
+        try:
+            result = yield self.collection.remove(oid)
             self.setResponseDictSuccess({"_id": str(result)})
         except ValidationError as e:
             self.setResponseDictErrors(e)
         return
 
 
+
+
 class DeleteModel(Model):
     @tornado.gen.coroutine
-    def setResponseDict(self):
+    def setDeleteResponseDict(self):
         params = self.params.getParams()
         for k,v in params.items():
             if type(v) == bytes:
@@ -154,6 +223,9 @@ class DeleteModel(Model):
         except ValidationError as e:
             self.setResponseDictErrors(e)
         return
+'''
 
-models = {"GET": GetModel, "POST": PostModel, "PUT": PutModel, "DELETE": DeleteModel}
+models = {k: ResourceModel for k in ["GET", "POST", "PUT", "DELETE"]}
+
+#models = {"GET": ResourceModel, "POST": ResourceModel, "PUT": ResourceModel, "DELETE": ResourceModel}
 
