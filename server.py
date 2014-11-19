@@ -6,7 +6,7 @@ import tornado.web
 from tornado.options import define, options
 import motor
 
-from rest_framework.models import models, ModelParams
+from rest_framework.resources import models, ModelParams
 from rest_framework.handler import rest_routes
 from rest_framework.factories import ModelFactory
 #from rest_framework.register import objects

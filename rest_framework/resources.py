@@ -10,6 +10,8 @@ from bson.objectid import ObjectId
 import json
 import datetime
 
+from rest_framework.serializers import JSONSerializer
+
 class ModelParams(object):
     def __init__(self, fields, args, kwargs, arguments):
         self.fields = fields
@@ -28,6 +30,11 @@ class ModelParams(object):
                 self.arguments[argument] = self.arguments[argument][0]
         if len(self.args):
             self.arguments['_id'] = self.args[0]
+
+        #params = self.params.getParams()
+        for k,v in self.arguments.items():
+            if type(v) == bytes:
+                self.arguments[k]= v.decode("utf-8") 
         return self.arguments
 
 
@@ -49,6 +56,33 @@ class Model(object):
             self.params ( ModelParams )
             Nothing is returned because generally a coroutine and yield statement is used.
         """
+    def pagination(self):
+        params = self.params.getParams()
+
+        if 'limit' in params: 
+            limit = params.get('limit', 50)
+            if int(limit[0]) > 100:
+                limit = 100
+            else:
+                limit = int(limit[0])
+        else:
+            limit = 50
+
+        if 'page' in params:
+            page = int(params['page'][0])
+        else:
+            page = 1
+
+        pagination = {}
+        pagination['page'] = page
+        pagination['limit'] = limit
+        pagination['next'] = page + 1
+        previous = page - 1
+        if previous < 1:
+            previous = 1 
+        pagination['previous'] = previous 
+        return pagination
+
 
     def setResponseDictSuccess(self, result):
         self.responseDict = {"status": "Success", "result":result}
@@ -56,8 +90,21 @@ class Model(object):
     def setResponseDictErrors(self, errors):
         self.responseDict = {"status": "Errors",  "errors": errors}
 
-    def getIdDict(self, _id):
-        return {"_id":ObjectId(_id)}
+    def getIdDict(self):
+        params = self.params.getParams()
+        if 'id' in params:
+            oid = {'id':int(params['id'])}
+        elif '_id' in params:
+            oid = {'_id':params['_id']}
+        else:
+            oid = None
+        return oid
+
+    def getSlace(self, **pagination):
+        end = pagination['page'] * pagination['limit']
+        start = end - pagination['limit']
+        slace = {'start':start, 'end':end} 
+        return slace
 
     def getResponseDict(self):
         return self.responseDict
@@ -66,22 +113,19 @@ class Model(object):
 class ResourceModel(Model):
 
     @tornado.gen.coroutine
-    def getList(self):
+    def getList(self, uri):
         """
         Either send get a single result if there is an _id parameter or send a list of results
         """
         params = self.params.getParams()
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
-        
-        print(params)
-
-        if len(params):
-            if 'id' in params:
-                oid = {'id':int(params['id'])}
-            else:
-                oid = {'_id':params['_id']}
+        pagination = self.pagination()
+        uri = uri
+        slace = self.getSlace(**pagination)
+        start, end = (slace['start'], slace['end'])
+        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
+        print(slace)
+        oid = self.getIdDict()
+        if oid:
             try:
                 result = yield self.collection.find_one(oid)
                 result['_id'] = str(result['_id'])
@@ -89,7 +133,7 @@ class ResourceModel(Model):
             except Exception as e:
                 self.setResponseDictErrors("Not Found!")
         else:
-            cursor = self.collection.find().sort([('_id', -1)])
+            cursor = self.collection.find().sort([('_id', -1)])[start:end]
             objects = []
             while (yield cursor.fetch_next):
                 objects.append(cursor.next_object())
@@ -101,9 +145,11 @@ class ResourceModel(Model):
     @tornado.gen.coroutine
     def setPostResponseDict(self):
         params = self.params.getParams()
+        '''
         for k,v in params.items():
             if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
+                params[k]= v.decode("utf-8")
+        ''' 
         obj = self.schematic(params)
         try:
             obj.created = datetime.datetime.utcnow()
@@ -118,10 +164,11 @@ class ResourceModel(Model):
     @tornado.gen.coroutine
     def setPutResponseDict(self):
         params = self.params.getParams()
+        '''
         for k,v in params.items():
             if type(v) == bytes:
                 params[k]= v.decode("utf-8")
-
+        '''
         obj = {key: value for key, value in params.items() if key is not '_id'}
 
         if 'id' in params:
@@ -139,10 +186,11 @@ class ResourceModel(Model):
     @tornado.gen.coroutine
     def setDeleteResponseDict(self):
         params = self.params.getParams()
+        '''
         for k,v in params.items():
             if type(v) == bytes:
                 params[k]= v.decode("utf-8") 
-
+        '''
         if params['id']:
             oid = {'id':int(params['id'])}
         else:
@@ -154,78 +202,7 @@ class ResourceModel(Model):
             self.setResponseDictErrors(e)
         return
 
-'''
-class DetailModel(Model):
-    @tornado.gen.coroutine
-    def setPutResponseDict(self):
-        params = self.params.getParams()
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print(repr(params))
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-
-
-        if params['id']:
-            oid = {'id':int(params['id'])}
-        else:
-            oid = {'_id':params['_id']}
-        try:
-            result = yield self.collection.update(oid,  {"$set": params})
-            self.setResponseDictSuccess({"_id": params['_id']})
-        except ValidationError as e:
-            self.setResponseDictErrors(e)
-        return
-
-
-    @tornado.gen.coroutine
-    def setDeleteResponseDict(self):
-        params = self.params.getParams()
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
-
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print(repr(params))
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-
-
-
-        if params['id']:
-            oid = {'id':int(params['id'])}
-        else:
-            oid = {'_id':params['_id']}
-        try:
-            result = yield self.collection.remove(oid)
-            self.setResponseDictSuccess({"_id": str(result)})
-        except ValidationError as e:
-            self.setResponseDictErrors(e)
-        return
-
-
-
-
-class DeleteModel(Model):
-    @tornado.gen.coroutine
-    def setDeleteResponseDict(self):
-        params = self.params.getParams()
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
-        if params['id']:
-            oid = {'id':int(params['id'])}
-        else:
-            oid = {'_id':params['_id']}
-        try:
-            result = yield self.collection.remove(oid)
-            self.setResponseDictSuccess({"_id": str(result)})
-        except ValidationError as e:
-            self.setResponseDictErrors(e)
-        return
-'''
 
 models = {k: ResourceModel for k in ["GET", "POST", "PUT", "DELETE"]}
-
 #models = {"GET": ResourceModel, "POST": ResourceModel, "PUT": ResourceModel, "DELETE": ResourceModel}
 

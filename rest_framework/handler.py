@@ -23,7 +23,7 @@ def generate_response_get(request):
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.getList()
+        yield model.getList(self.request.uri)
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
@@ -88,26 +88,6 @@ class ResourceHandler(MotorHandler):
     @generate_response_delete
     def delete(self, *args, **kwargs):
         self.sendJson(self.response_dict)
-
-
-'''
-class DetailHandler(MotorHandler):
-    
-    SUPPORTED_METHODS = ("GET","PUT","DELETE")
-
-    @generate_response_get
-    def get(self, *args, **kwargs):
-        self.sendJson(self.response_dict)
-
-    @generate_response_put
-    def put(self, *args, **kwargs):
-        self.sendJson(self.response_dict)
-
-    @generate_response_delete
-    def delete(self, *args, **kwargs):
-        self.sendJson(self.response_dict)
-
-'''
 
 
 def rest_routes(objects, model):

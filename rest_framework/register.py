@@ -19,18 +19,7 @@ class ClassDecorator(object):
 	        return 1
     '''
 
-#Manual Exclude Class not used.
-#exclude = ['UUIDType', 'StringType', 'Model', 'DateTimeType', 'IntType', 'ObjectIdType', 'BaseModel']
-#register_models = [i for i, j in globals().copy().items() if inspect.isclass(j) and i not in exclude]
 register_models = [i for i, j in globals().copy().items() if inspect.isclass(j) and j.__mro__[1].__name__ == 'BaseModel']
-
-#register_models = [getattr(sys.modules[__name__], i) for i, j in globals().copy().items() if inspect.isclass(j) and j.__mro__[1].__name__ == 'BaseModel']
-
-
-#objects = {model: model for model in register_models} # objects = {'Song': 'Song'}
-
-#objects = {'Song': Song}
-
 objects = {model: getattr(sys.modules[__name__], model) for model in register_models} # objects = {'Song': Song}
 
 
