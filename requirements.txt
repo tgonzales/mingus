@@ -1,13 +1,9 @@
 certifi==14.05.14
 easydict==1.5
 greenlet==0.4.5
-mongoengine==0.8.7
 motor==0.2
-motorengine==0.8.11
 pymongo==2.7
 python-mimeparse==0.1.4
-restless==2.0.1
-schema==0.1.1
 schematics==1.0-0
 six==1.8.0
 tornado==4.0.2
