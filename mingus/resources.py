@@ -3,14 +3,12 @@ from schematics.types.compound import ListType, DictType, ModelType
 
 import tornado.gen
 import tornado.web
-#import motor
-from schematics.exceptions import ValidationError
-#from schematics.contrib.mongo import ObjectIdType
+from schematics.exceptions import ValidationError, ModelConversionError
 from bson.objectid import ObjectId
 import json
 import datetime
 
-from rest_framework.serializers import JSONSerializer
+from mingus.serializers import JSONSerializer
 
 class ModelParams(object):
     def __init__(self, fields, args, kwargs, arguments):
@@ -25,18 +23,34 @@ class ModelParams(object):
         """
         types = [DictType, GeoPointType, ListType, ModelType]
         fieldkeys = self.fields.keys()
-        for argument, value in self.arguments.items():
-            if type(value) is list and argument in fieldkeys and self.fields[argument] not in types:
-                self.arguments[argument] = self.arguments[argument][0]
+
+        for k,v in self.arguments.items():
+            if type(v) is list and k in fieldkeys and self.fields[k] not in types:
+                self.arguments[k] = self.arguments[k][0].decode("utf-8")
+
         if len(self.args):
             self.arguments['_id'] = self.args[0]
 
-        #params = self.params.getParams()
-        for k,v in self.arguments.items():
-            if type(v) == bytes:
-                self.arguments[k]= v.decode("utf-8") 
         return self.arguments
 
+    def getParamsPost(self):
+        """
+        Check the schematic object to see if arguments from Tornado can be lists or dictionaries
+        """
+        #types = [DictType, GeoPointType, ListType, ModelType]
+        #fieldkeys = self.fields.keys()
+        j = JSONSerializer() 
+        if 'bulk' in self.arguments:
+            self.arguments['bulk'] = j.deserialize(self.arguments['bulk'][0])
+        else:
+            for k,v in self.arguments.items():
+                self.arguments =  j.deserialize(k)
+                break
+
+        if len(self.args):
+            self.arguments['_id'] = self.args[0]
+
+        return self.arguments
 
 class Model(object):
 
@@ -113,7 +127,7 @@ class Model(object):
 class ResourceModel(Model):
 
     @tornado.gen.coroutine
-    def getList(self, uri):
+    def get(self, uri):
         """
         Either send get a single result if there is an _id parameter or send a list of results
         """
@@ -122,8 +136,6 @@ class ResourceModel(Model):
         uri = uri
         slace = self.getSlace(**pagination)
         start, end = (slace['start'], slace['end'])
-        print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
-        print(slace)
         oid = self.getIdDict()
         if oid:
             try:
@@ -133,7 +145,7 @@ class ResourceModel(Model):
             except Exception as e:
                 self.setResponseDictErrors("Not Found!")
         else:
-            cursor = self.collection.find().sort([('_id', -1)])[start:end]
+            cursor = self.collection.find(params).sort([('_id', -1)])[start:end]
             objects = []
             while (yield cursor.fetch_next):
                 objects.append(cursor.next_object())
@@ -141,34 +153,32 @@ class ResourceModel(Model):
             self.setResponseDictSuccess(results)
         return
 
+    @tornado.gen.coroutine
+    def post(self):
+        params = self.params.getParamsPost()
+        if 'bulk' in params:
+            try:
+                self.bulk()
+                self.setResponseDictSuccess({"bulk":"Implemented"})
+            except ValidationError as e:
+                self.setResponseDictErrors(e)
+            return
+        else:
+            obj = self.schematic(params)
+            try:
+                obj.validate()
+                obj.created = datetime.datetime.utcnow()
+                obj._id = ObjectId()
+                result = yield self.collection.insert(obj.to_native())
+                self.setResponseDictSuccess({"_id": str(result)})
+            except ValidationError as e:
+                self.setResponseDictErrors(e.messages)
+            return
+
 
     @tornado.gen.coroutine
-    def setPostResponseDict(self):
+    def put(self):
         params = self.params.getParams()
-        '''
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8")
-        ''' 
-        obj = self.schematic(params)
-        try:
-            obj.created = datetime.datetime.utcnow()
-            obj._id = ObjectId()
-            obj.validate()
-            result = yield self.collection.insert(obj.to_primitive())
-            self.setResponseDictSuccess({"_id": str(result)})
-        except ValidationError as e:
-            self.setResponseDictErrors(e)
-        return
-
-    @tornado.gen.coroutine
-    def setPutResponseDict(self):
-        params = self.params.getParams()
-        '''
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8")
-        '''
         obj = {key: value for key, value in params.items() if key is not '_id'}
 
         if 'id' in params:
@@ -184,13 +194,8 @@ class ResourceModel(Model):
 
 
     @tornado.gen.coroutine
-    def setDeleteResponseDict(self):
+    def delete(self):
         params = self.params.getParams()
-        '''
-        for k,v in params.items():
-            if type(v) == bytes:
-                params[k]= v.decode("utf-8") 
-        '''
         if params['id']:
             oid = {'id':int(params['id'])}
         else:
@@ -203,6 +208,45 @@ class ResourceModel(Model):
         return
 
 
-models = {k: ResourceModel for k in ["GET", "POST", "PUT", "DELETE"]}
-#models = {"GET": ResourceModel, "POST": ResourceModel, "PUT": ResourceModel, "DELETE": ResourceModel}
+    @tornado.gen.coroutine
+    def bulk(self):
+        params = self.params.getParams()
+        data = params['bulk']            
+        try:
+            bulk = self.collection.initialize_ordered_bulk_op()
+            data = params['bulk']
+            if 'insert' in data:
+                for obj in data['insert']:
+                    obj['created'] = datetime.datetime.utcnow()
+                    obj['_id'] = ObjectId()
+                    bulk.insert(obj)
+            result = yield bulk.execute()
+        except BulkWriteError as e:
+            self.setResponseDictErrors(e)
 
+            '''
+            bulk = self.collection.initialize_ordered_bulk_op()
+            # Remove all documents from the previous example.
+            bulk.find({}).remove()
+            for i in range(10000):
+                bulk.insert({'_id': i})
+            #bulk.insert({'_id': 2})
+            #bulk.insert({'_id': 3})
+            bulk.find({'_id': 1}).update({'$set': {'foo': 'bar'}})
+            bulk.find({'_id': 4}).upsert().update({'$inc': {'j': 1}})
+            bulk.find({'j': 1}).replace_one({'j': 2})
+            result = yield bulk.execute()
+            '''
+
+    @tornado.gen.coroutine
+    def patch(self):
+        pass
+
+
+try:
+    from services.resource import models_factory
+except:
+    #pass
+    models_factory = {k: ResourceModel for k in ["GET", "POST", "PUT", "DELETE", "PATCH"]}
+
+models = models_factory

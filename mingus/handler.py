@@ -23,7 +23,7 @@ def generate_response_get(request):
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.getList(self.request.uri)
+        yield model.get(self.request.uri)
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
@@ -36,7 +36,7 @@ def generate_response_post(request):
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.setPostResponseDict()
+        yield model.post()
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
@@ -49,7 +49,7 @@ def generate_response_put(request):
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.setPutResponseDict()
+        yield model.put()
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
@@ -62,16 +62,28 @@ def generate_response_delete(request):
     def _request(self, *args, **kwargs):
 
         model = self.model.build(self.prefix, self.request, args, kwargs)
-        yield model.setDeleteResponseDict()
+        yield model.delete()
         self.response_dict = model.getResponseDict()
         tornado.gen.coroutine(request)(self, *args, **kwargs)
 
     return _request
 
 
+def generate_response_patch(request):
+    @tornado.web.asynchronous
+    @tornado.gen.coroutine
+    def _request(self, *args, **kwargs):
+
+        model = self.model.build(self.prefix, self.request, args, kwargs)
+        yield model.patch()
+        self.response_dict = model.getResponseDict()
+        tornado.gen.coroutine(request)(self, *args, **kwargs)
+
+    return _request
+
 class ResourceHandler(MotorHandler):
     
-    SUPPORTED_METHODS = ("GET", "POST", "PUT","DELETE")
+    SUPPORTED_METHODS = ("GET", "POST", "PUT","DELETE", "PATCH")
     
     @generate_response_get
     def get(self, *args, **kwargs):
@@ -89,6 +101,9 @@ class ResourceHandler(MotorHandler):
     def delete(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
+    @generate_response_patch
+    def patch(self, *args, **kwargs):
+        self.sendJson(self.response_dict)
 
 def rest_routes(objects, model):
     routes = []
