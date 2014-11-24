@@ -18,6 +18,13 @@ Is Simple
     from mingus.server import main
     main()
 ```
+
+Install
+-------
+```sh
+   $ pip install mingus-rest-framework
+```
+
 start rest services:
 ```sh
 $ mongod
@@ -47,8 +54,7 @@ Rest HTTP Commands with curl
 ----------------------------
 ```sh
 #Insert one single object
-$ curl -X POST -v -H "Accept: application/json" -d 'data={"slug":"4","song":"Donna Lee"}' http://127.0.0.1:8888/song/
-$ curl -X POST -v -H "Accept: application/json" -d "id=8008&artist=8MikeArtistMike&song=8SongToSongSong&rank=8001" http://127.0.0.1:8888/song/
+$ curl -X POST -v -H "Accept: application/json" -d "id=2002&artist=MikeArtistMike&song=SongToSongSong&rank=8001" http://127.0.0.1:8888/song/
 $ curl -X GET -v -H "Accept: application/json" http://127.0.0.1:8888/song/8888d58dd1e5ba35fc062788/?id=2002
 $ curl -X PUT -v -H "Accept: application/json" -d "artist=MikeArtistMike&song=SongToSongSong&rank=1021" http://127.0.0.1:8888/song/?id=2002
 $ curl -X DELETE -v -H "Accept: application/json" http://127.0.0.1:8888/song/8888d58dd1e5ba35fc062788/?id=2002
