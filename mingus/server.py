@@ -13,18 +13,19 @@ from mingus.register import objects
 
 define("port", default=8888, help="run on the given port", type=int)
 define("database", default='test', help="run on the database")
+define("version", default='v1', help="run on the API version")
 
-#db = motor.MotorClient().test
-#resource = ModelFactory(db, objects, models, ModelParams)
 
 def main():
     tornado.options.parse_command_line()
     db = motor.MotorClient()[options.database]
+    version = options.version
     print('*******')
+    print('** Mingus Framework starting...')
     print('MongoDatabase: {0}'.format(options.database))
     print('ServerHTTPPort: {0}'.format(options.port))
     resource = ModelFactory(db, objects, models, ModelParams)
-    application = tornado.web.Application(rest_routes(objects, resource), debug=True)
+    application = tornado.web.Application(rest_routes(objects, resource, version), debug=True)
     http_server = tornado.httpserver.HTTPServer(application)
     http_server.listen(options.port)
     tornado.ioloop.IOLoop.instance().start()	
