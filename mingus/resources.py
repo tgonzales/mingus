@@ -109,7 +109,7 @@ class Model(object):
         if 'id' in params:
             oid = {'id':int(params['id'])}
         elif '_id' in params:
-            oid = {'_id':params['_id']}
+            oid = {'_id':ObjectId(params['_id'])}
         else:
             oid = None
         return oid
@@ -178,15 +178,11 @@ class ResourceModel(Model):
 
     @tornado.gen.coroutine
     def put(self):
-        params = self.params.getParams()
+        params = self.params.getParamsPost()
         obj = {key: value for key, value in params.items() if key is not '_id'}
-
-        if 'id' in params:
-            oid = {'id':int(params['id'])}
-        else:
-            oid = {'_id':params['_id']}
+        oid = self.getIdDict()
         try:
-            result = yield self.collection.update(oid,  {"$set": obj}, upsert=True)
+            result = yield self.collection.update(oid,  {'$set':obj}, upsert=True)
             self.setResponseDictSuccess({"_id": params['_id']})
         except ValidationError as e:
             self.setResponseDictErrors(e)
@@ -196,10 +192,7 @@ class ResourceModel(Model):
     @tornado.gen.coroutine
     def delete(self):
         params = self.params.getParams()
-        if params['id']:
-            oid = {'id':int(params['id'])}
-        else:
-            oid = {'_id':params['_id']}
+        oid = self.getIdDict()
         try:
             result = yield self.collection.remove(oid)
             self.setResponseDictSuccess({"_id": str(result)})
@@ -240,7 +233,15 @@ class ResourceModel(Model):
 
     @tornado.gen.coroutine
     def patch(self):
-        pass
+        params = self.params.getParamsPost()
+        obj = {key: value for key, value in params.items() if key is not '_id'}
+        oid = self.getIdDict()
+        try:
+            result = yield self.collection.update(oid,  {'$set':obj}, upsert=True)
+            self.setResponseDictSuccess({"_id": params['_id']})
+        except ValidationError as e:
+            self.setResponseDictErrors(e)
+        return
 
 
 try:

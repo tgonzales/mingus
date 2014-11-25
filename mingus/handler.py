@@ -105,6 +105,7 @@ class ResourceHandler(MotorHandler):
     def patch(self, *args, **kwargs):
         self.sendJson(self.response_dict)
 
+
 def rest_routes(objects, model):
     routes = []
     for name, cls in objects.items():
