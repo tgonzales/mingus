@@ -106,19 +106,19 @@ class ResourceHandler(MotorHandler):
         self.sendJson(self.response_dict)
 
 
-def rest_routes(objects, model):
+def rest_routes(objects, model, version):
     routes = []
     for name, cls in objects.items():
-        print('Starting Server - Tornado Rest Framework')
-        
-        route = (r'/%s/?' % name.lower(), ResourceHandler, dict(model=model, prefix=name, mtype="list"))
+        #version = 'v1'
+        uri = '{0}/{1}'.format(version,name.lower())
+        route = (r'/%s/?' % uri, ResourceHandler, dict(model=model, prefix=name, mtype="list"))
         #print(route)
-        print('model:{0} - list and post --> /{0}/?'.format(name.lower()))
+        print('model:{0} - list and post --> /{1}/?'.format(name.lower(),uri))
         routes.append( route )
         
-        route = (r'/%s/([0-9a-fA-F]{24,})/?' % name.lower(),  ResourceHandler, dict(model=model, prefix=name, mtype="detail"))
+        route = (r'/%s/([0-9a-fA-F]{24,})/?' % uri, ResourceHandler, dict(model=model, prefix=name, mtype="detail"))
         #print(route)
-        print('model:{0} - get, put, delete --> /{0}/([0-9a-fA-F]{{24,}})/?'.format(name.lower()))
+        print('model:{0} - get, put, delete --> /{1}/([0-9a-fA-F]{{24,}})/?'.format(name.lower(),uri))
         routes.append( route )
         
     return routes

@@ -93,13 +93,13 @@ class Model(object):
         pagination['next'] = page + 1
         previous = page - 1
         if previous < 1:
-            previous = 1 
+            previous = None 
         pagination['previous'] = previous 
         return pagination
 
 
-    def setResponseDictSuccess(self, result):
-        self.responseDict = {"status": "Success", "result":result}
+    def setResponseDictSuccess(self, result, meta=None):
+        self.responseDict = {"status": "Success", "meta":meta, "objects":result}
 
     def setResponseDictErrors(self, errors):
         self.responseDict = {"status": "Errors",  "errors": errors}
@@ -133,24 +133,40 @@ class ResourceModel(Model):
         """
         params = self.params.getParams()
         pagination = self.pagination()
-        uri = uri
         slace = self.getSlace(**pagination)
         start, end = (slace['start'], slace['end'])
         oid = self.getIdDict()
+
         if oid:
             try:
                 result = yield self.collection.find_one(oid)
                 result['_id'] = str(result['_id'])
+                result['uri'] = uri
                 self.setResponseDictSuccess(result)
             except Exception as e:
                 self.setResponseDictErrors("Not Found!")
         else:
-            cursor = self.collection.find(params).sort([('_id', -1)])[start:end]
-            objects = []
-            while (yield cursor.fetch_next):
-                objects.append(cursor.next_object())
-            results = {'data':[document for document in objects]}
-            self.setResponseDictSuccess(results)
+            try:
+                count = yield self.collection.find(params)[start:end].count()
+                cursor = self.collection.find(params).sort([('_id', -1)])[start:end]
+                meta = {
+                    "limit": pagination['limit'],
+                    "next": pagination['next'],
+                    "offset": pagination['page'],
+                    "previous": pagination['previous'],                    
+                }
+                meta['total_count'] = str(count)
+                if count <  pagination['limit']:
+                    meta['next'] = None
+                objects = []
+                while (yield cursor.fetch_next):
+                    obj = cursor.next_object()
+                    obj['uri'] = uri + str(obj["_id"])
+                    objects.append(obj)
+                results = [document for document in objects]
+                self.setResponseDictSuccess(results,meta)
+            except Exception as e:
+                self.setResponseDictErrors("Not Found!")
         return
 
     @tornado.gen.coroutine

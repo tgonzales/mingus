@@ -7,3 +7,4 @@ python-mimeparse==0.1.4
 schematics==1.0-0
 six==1.8.0
 tornado==4.0.2
+requests
