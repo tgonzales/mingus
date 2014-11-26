@@ -1,7 +1,7 @@
 try:
     from services.models import *
 except:
-    from mingus.services.models import *
+    from mingus.service.models import *
 
 import inspect
 import sys
