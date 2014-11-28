@@ -3,6 +3,7 @@ from schematics.types.compound import ListType, DictType, ModelType
 
 import tornado.gen
 import tornado.web
+import tornado.escape
 from schematics.exceptions import ValidationError, ModelConversionError
 from bson.objectid import ObjectId
 import json
@@ -17,6 +18,9 @@ class ModelParams(object):
         self.kwargs = kwargs
         self.arguments = arguments
 
+    def getFieldKeys(self):
+        return self.fields.keys()
+
     def getParams(self):
         """
         Check the schematic object to see if arguments from Tornado can be lists or dictionaries
@@ -24,24 +28,33 @@ class ModelParams(object):
         types = [DictType, GeoPointType, ListType, ModelType]
         fieldkeys = self.fields.keys()
 
-        for k,v in self.arguments.items():
-            if type(v) is list and k in fieldkeys and self.fields[k] not in types:
-                self.arguments[k] = self.arguments[k][0].decode("utf-8")
+        j = JSONSerializer() 
+        if 'q' in self.arguments:
+            params = tornado.escape.to_unicode(self.arguments['q'][0])
+            params = tornado.escape.json_decode(params)
+            self.arguments = params
+        else:
+            for k,v in self.arguments.items():
+                if type(v) is list and k in fieldkeys and self.fields[k] not in types:
+                    self.arguments[k] = self.arguments[k][0].decode("utf-8")
 
         if len(self.args):
             self.arguments['_id'] = self.args[0]
 
         return self.arguments
 
-    def getParamsPost(self):
+    def getParamsParse(self):
         """
         Check the schematic object to see if arguments from Tornado can be lists or dictionaries
         """
         #types = [DictType, GeoPointType, ListType, ModelType]
         #fieldkeys = self.fields.keys()
+
         j = JSONSerializer() 
         if 'bulk' in self.arguments:
-            self.arguments['bulk'] = j.deserialize(self.arguments['bulk'][0])
+            params = tornado.escape.to_unicode(self.arguments['bulk'][0])
+            params = tornado.escape.json_decode(params)
+            self.arguments['bulk'] = params
         else:
             for k,v in self.arguments.items():
                 self.arguments =  j.deserialize(k)
@@ -51,6 +64,7 @@ class ModelParams(object):
             self.arguments['_id'] = self.args[0]
 
         return self.arguments
+
 
 class Model(object):
 
@@ -65,9 +79,9 @@ class Model(object):
 
         """
             Main logic for request is performed here
-            self.collection ( mongo collection )
-            self.schematic ( schematic model )
-            self.params ( ModelParams )
+              self.collection ( mongo collection )
+              self.schematic ( schematic model )
+              self.params ( ModelParams )
             Nothing is returned because generally a coroutine and yield statement is used.
         """
     def pagination(self):
@@ -99,7 +113,10 @@ class Model(object):
 
 
     def setResponseDictSuccess(self, result, meta=None):
-        self.responseDict = {"status": "Success", "meta":meta, "objects":result}
+        if meta:
+            self.responseDict = {"status": "Success", "meta":meta, "objects":result}
+        else:
+            self.responseDict = {"status": "Success", "object":result}
 
     def setResponseDictErrors(self, errors):
         self.responseDict = {"status": "Errors",  "errors": errors}
@@ -124,54 +141,92 @@ class Model(object):
         return self.responseDict
 
 
+    def blacklist(self):
+        f = self.schematic()
+        try:
+            f_whitelist = [field for field in f.to_primitive(role='public').keys()]
+            print(f_whitelist)
+
+            blacklist = {k:0 for k in self.params.getFieldKeys() if k not in f_whitelist}
+            print(blacklist)
+        except:
+            blacklist = None
+        return blacklist        
+
+    def queryset(self):
+        f = self.schematic()
+        params = self.params.getParams()
+        try:
+            query = f.queryset()
+            print('query ~~~~~~~~~~~~~~~~~~')
+            print(query)
+            for k,v in query.items():
+                params[k] = v
+            print('params ~~~~~~~~~~~~~~~~~~')
+            print(params)
+        except:
+            pass
+        return params   
+
 class ResourceModel(Model):
 
+
     @tornado.gen.coroutine
-    def get(self, uri):
+    def getlist(self, uri):
         """
-        Either send get a single result if there is an _id parameter or send a list of results
+        Get a list of results
         """
-        params = self.params.getParams()
+        blacklist = self.blacklist()
+        params = self.queryset()
         pagination = self.pagination()
         slace = self.getSlace(**pagination)
         start, end = (slace['start'], slace['end'])
-        oid = self.getIdDict()
-
-        if oid:
-            try:
-                result = yield self.collection.find_one(oid)
-                result['_id'] = str(result['_id'])
-                result['uri'] = uri
-                self.setResponseDictSuccess(result)
-            except Exception as e:
-                self.setResponseDictErrors("Not Found!")
-        else:
-            try:
-                count = yield self.collection.find(params)[start:end].count()
-                cursor = self.collection.find(params).sort([('_id', -1)])[start:end]
-                meta = {
-                    "limit": pagination['limit'],
-                    "next": pagination['next'],
-                    "offset": pagination['page'],
-                    "previous": pagination['previous'],                    
-                }
-                meta['total_count'] = str(count)
-                if count <  pagination['limit']:
-                    meta['next'] = None
-                objects = []
-                while (yield cursor.fetch_next):
-                    obj = cursor.next_object()
-                    obj['uri'] = uri + str(obj["_id"])
-                    objects.append(obj)
-                results = [document for document in objects]
-                self.setResponseDictSuccess(results,meta)
-            except Exception as e:
-                self.setResponseDictErrors("Not Found!")
+        try:
+            count = yield self.collection.find(params)[start:end].count()
+            cursor = self.collection.find(params,blacklist).sort([('_id', -1)])[start:end]
+            meta = {
+                "limit": pagination['limit'],
+                "next": pagination['next'],
+                "offset": pagination['page'],
+                "previous": pagination['previous'],                    
+            }
+            meta['total_count'] = str(count)
+            if count <  pagination['limit']:
+                meta['next'] = None
+            objects = []
+            while (yield cursor.fetch_next):
+                obj = cursor.next_object()
+                obj['uri'] = uri + str(obj["_id"])
+                objects.append(obj)
+            results = [document for document in objects]
+            self.setResponseDictSuccess(results,meta)
+        except Exception as e:
+            self.setResponseDictErrors("Not Found!")
         return
+
+
+    @tornado.gen.coroutine
+    def getobj(self, uri):
+        """
+        Get a single result
+        """
+        #params = self.params.getParams()
+        oid = self.getIdDict()
+        blacklist = self.blacklist()
+        try:
+            result = yield self.collection.find_one(oid,blacklist)
+            result['_id'] = str(result['_id'])
+            result['uri'] = uri
+            self.setResponseDictSuccess(result)
+        except Exception as e:
+            self.setResponseDictErrors("Not Found!")
+        return
+
 
     @tornado.gen.coroutine
     def post(self):
-        params = self.params.getParamsPost()
+        params = self.params.getParamsParse()
+
         if 'bulk' in params:
             try:
                 self.bulk()
@@ -179,6 +234,7 @@ class ResourceModel(Model):
             except ValidationError as e:
                 self.setResponseDictErrors(e)
             return
+
         else:
             obj = self.schematic(params)
             try:
@@ -194,20 +250,22 @@ class ResourceModel(Model):
 
     @tornado.gen.coroutine
     def put(self):
-        params = self.params.getParamsPost()
+        params = self.params.getParamsParse()
         obj = {key: value for key, value in params.items() if key is not '_id'}
         oid = self.getIdDict()
+        obj_validate = self.schematic(params)
         try:
-            result = yield self.collection.update(oid,  {'$set':obj}, upsert=True)
-            self.setResponseDictSuccess({"_id": params['_id']})
+            obj_validate.validate()
+            result = yield self.collection.update(oid, obj, upsert=False)
+            self.setResponseDictSuccess({"_id": str(result)})
         except ValidationError as e:
-            self.setResponseDictErrors(e)
+            self.setResponseDictErrors(e.messages)
         return
 
 
     @tornado.gen.coroutine
     def delete(self):
-        params = self.params.getParams()
+        #params = self.params.getParams()
         oid = self.getIdDict()
         try:
             result = yield self.collection.remove(oid)
@@ -216,11 +274,10 @@ class ResourceModel(Model):
             self.setResponseDictErrors(e)
         return
 
-
     @tornado.gen.coroutine
     def bulk(self):
         params = self.params.getParams()
-        data = params['bulk']            
+        data = params['bulk']
         try:
             bulk = self.collection.initialize_ordered_bulk_op()
             data = params['bulk']
@@ -249,7 +306,7 @@ class ResourceModel(Model):
 
     @tornado.gen.coroutine
     def patch(self):
-        params = self.params.getParamsPost()
+        params = self.params.getParamsParse()
         obj = {key: value for key, value in params.items() if key is not '_id'}
         oid = self.getIdDict()
         try:

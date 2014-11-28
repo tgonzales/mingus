@@ -24,7 +24,7 @@ $ mongod
 # other terminal
 $ python app.py
 # other terminal
-$ curl -X POST -v -H "Accept: application/json" -d 'bulk={"insert":[{"slug":"1","song":"My Funny Valentine"},{"slug":"2","song":"500 Miles High"},{"slug":"3","song":"All of Me"}]}' http://127.0.0.1:8888/v1/song/
+$ curl -X POST -v -H "Accept: application/json" -d 'bulk={"insert":[{"slug":"1","rank":4,"song":"My Funny Valentine"},{"slug":"2","rank":4,"song":"500 Miles High"},{"slug":"3","rank":5,"song":"All of Me"}]}' http://127.0.0.1:8888/v1/song/
 $ curl -X GET -v -H "Accept: application/json" http://127.0.0.1:8888/song
 $ curl -X GET -v -H "Accept: application/json" http://127.0.0.1:8888/song/?slug=1
 ```
